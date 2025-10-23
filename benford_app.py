@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 """
 벤포드 분석 웹 애플리케이션 (Streamlit)
 """
