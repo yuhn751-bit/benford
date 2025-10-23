@@ -1,4 +1,5 @@
-
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 벤포드 분석 웹 애플리케이션 (Streamlit)
 """
@@ -39,16 +40,14 @@ class BenfordAnalyzer:
         """벤포드 법칙 확률 계산"""
         return np.log10(1 + 1 / digit)
     
-    def leading_two_digits(self, number):
-        """숫자의 앞 두자리 추출"""
+    def leading_digit(self, number):
+        """숫자의 첫 자리 추출"""
         number = abs(number)
         if number == 0:
             return None
         
-        while number >= 100:
+        while number >= 10:
             number /= 10
-        while number < 10:
-            number *= 10
         
         return int(number)
     
@@ -63,9 +62,9 @@ class BenfordAnalyzer:
         df['금액'] = pd.to_numeric(df['금액'], errors='coerce')
         df = df.dropna(subset=['금액'])
         
-        # 앞 두자리 추출
-        df['두자리수'] = df['금액'].apply(self.leading_two_digits)
-        df = df[(df['두자리수'] >= 10) & (df['두자리수'] <= 99)]
+        # 첫 자리 추출
+        df['첫자리'] = df['금액'].apply(self.leading_digit)
+        df = df[(df['첫자리'] >= 1) & (df['첫자리'] <= 9)]
         
         self.data = df
         
@@ -84,8 +83,8 @@ class BenfordAnalyzer:
         
         results = []
         
-        for digit in range(10, 100):
-            observed = (data['두자리수'] == digit).sum()
+        for digit in range(1, 10):
+            observed = (data['첫자리'] == digit).sum()
             expected_prob = self.benford_probability(digit)
             expected_count = expected_prob * n
             
@@ -98,7 +97,7 @@ class BenfordAnalyzer:
             
             results.append({
                 '구분': label,
-                '두자리수': digit,
+                '첫자리': digit,
                 '관측빈도': observed,
                 '관측비율': obs_ratio,
                 '기대비율': expected_prob,
@@ -243,7 +242,7 @@ class BenfordAnalyzer:
             all_findings['Z값_절대'] = all_findings['Z값'].abs()
             top15 = all_findings.nlargest(15, 'Z값_절대').copy()
             
-            cols = ['범위', '구분', '두자리수', '관측빈도', '기대빈도', '표본수', 'Z값', '신뢰수준판정']
+            cols = ['범위', '구분', '첫자리', '관측빈도', '기대빈도', '표본수', 'Z값', '신뢰수준판정']
             return top15[[col for col in cols if col in top15.columns]]
         
         return None
@@ -263,10 +262,10 @@ class BenfordAnalyzer:
             
             severity_score = red_count * 3 + orange_count * 2 + yellow_count * 1
             
-            if severity_score > 100:
+            if severity_score > 15:
                 risk = "🔴 높음"
                 action = "즉각 조사 필요"
-            elif severity_score > 50:
+            elif severity_score > 8:
                 risk = "🟠 중간"
                 action = "주의 깊은 검토 필요"
             else:
@@ -275,7 +274,7 @@ class BenfordAnalyzer:
             
             explanations.append({
                 '항목': '종합 위험도',
-                '값': f'{severity_score}/270',
+                '값': f'{severity_score}/27',
                 '평가': risk,
                 '조치': action
             })
@@ -317,7 +316,7 @@ class BenfordAnalyzer:
             })
             
             for i, (_, row) in enumerate(top5.iterrows(), 1):
-                digit = int(row['두자리수'])
+                digit = int(row['첫자리'])
                 obs = int(row['관측빈도'])
                 exp = row['기대빈도']
                 z = row['Z값']
@@ -327,7 +326,7 @@ class BenfordAnalyzer:
                     '항목': f'{i}. {digit}으로 시작',
                     '값': f'{obs}건 (정상:{exp:.0f}건)',
                     '평가': f'Z={z:.1f}',
-                    '조치': f'+{diff:.0f}건 초과'
+                    '조치': f'{diff:+.0f}건 차이'
                 })
         
         # 데이터 통계
@@ -406,8 +405,8 @@ class BenfordAnalyzer:
         output = io.BytesIO()
         
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            # 원본 데이터 먼저 (두자리수 컬럼 제거)
-            original_data = self.data.drop(columns=['두자리수'], errors='ignore')
+            # 원본 데이터 먼저 (첫자리 컬럼 제거)
+            original_data = self.data.drop(columns=['첫자리'], errors='ignore')
             original_data.to_excel(writer, sheet_name='00_원본데이터', index=False)
             
             # 분석 결과들
@@ -484,6 +483,19 @@ def main():
         - **|Z| ≥ 1.5**: 🟠 주의 필요
         - **|Z| ≥ 2.0**: 🔴 조사 필요
         - **|Z| ≥ 3.0**: 🔴🔴 즉각 조사
+        """)
+        
+        st.markdown("---")
+        st.markdown("### 📊 벤포드 법칙")
+        st.markdown("""
+        자연스러운 숫자 데이터의 **첫 자리**는:
+        - **1로 시작**: 30.1% (가장 많음)
+        - **2로 시작**: 17.6%
+        - **3로 시작**: 12.5%
+        - ...
+        - **9로 시작**: 4.6% (가장 적음)
+        
+        조작된 데이터는 이 패턴을 따르지 않습니다.
         """)
     
     # 메인 영역
@@ -573,6 +585,11 @@ def main():
                 2. '10_분석해설' 시트에서 종합 평가 확인
                 3. '09_중점검토' 시트에서 이상치 Top 15 확인
                 4. 🔴빨강, 🟠주황 표시된 항목 우선 조사
+                
+                ℹ️ **첫 자리 분석:**
+                - 1,234원 → 1로 시작
+                - 98,765원 → 9로 시작
+                - 첫 자리(1-9)만 분석하여 더 정확한 결과 제공
                 """)
                 
         except Exception as e:
